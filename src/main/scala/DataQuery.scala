@@ -1,7 +1,7 @@
 import org.apache.log4j.{Level, Logger}
-import org.apache.spark.sql.{DataFrame, Dataset, SparkSession}
+import org.apache.spark.sql.{DataFrame, Dataset, SparkSession, functions}
 import org.apache.spark.sql.catalyst.dsl.expressions.StringToAttributeConversionHelper
-import org.apache.spark.sql.functions.{col, desc, expr, last}
+import org.apache.spark.sql.functions.{asc, col, desc, expr, last, sum}
 
 import scala.collection.mutable.Map
 
@@ -10,15 +10,14 @@ object DataQuery {
   Logger.getLogger("akka").setLevel(Level.OFF)
   val spark = SparkSession
     .builder
-    .appName("Hello Spark App")
-    //.master("local")
+    .appName("Data Query App")
+    .master("local")
     //.enableHiveSupport()
     .config("spark.master", "local")
     .config("spark.eventLog.enabled", false)
     .getOrCreate()
 
-  // Please remember to update hdfs location path
-  val df = spark.read.format("csv").option("header", "true").load("hdfs://localhost:9000/user/akiem/time_series_covid_19_deaths_US.csv")
+
 
 
   //For Jul 1, 2020 - Jul 31, 2020
@@ -26,7 +25,11 @@ object DataQuery {
   val URBANPOPCRITERIA = 50000
   val header = List("Admin2", "Province_State", "Population", "UID")
 
-  def findDeadliestCity(byMonth: Int, andYear: Int): String = {
+  def findDeadliestCity(byMonth: Int = 7, andYear: Int = 2020, urbanArea: Boolean = true): DataFrame = {
+    // Please remember to update hdfs location path
+    Logger.getLogger("org").setLevel(Level.OFF)
+    Logger.getLogger("akka").setLevel(Level.OFF)
+    val df = spark.read.format("csv").option("header", "true").load("hdfs://localhost:9000/user/akiem/time_series_covid_19_deaths_US.csv")
     var daysInMonth = collection.mutable.Map(1 -> 31, 2 -> 28, 3 -> 31,
       4 -> 30, 5 -> 31, 6 -> 30,
       7 -> 31, 8 -> 31, 9 -> 30,
@@ -60,25 +63,83 @@ object DataQuery {
     val startDay = 4 // per new testListDF columns with added header columns
     val endDay = daysInMonth(byMonth) + startDay - 1
 
-    val testMthDF = df.select(testList.map(m => col(m)): _*)
+    val testMthDF = df.select(testList.map(m => col(m)): _*).withColumnRenamed("Admin2", "County")
+      .withColumnRenamed("Province_State","State")
     val test = testMthDF.withColumn("Total", ((col(testMthDF.columns((endDay))) - col(testMthDF.columns(startDay)))))
 
+
     // Top 5 Most Deadly Cities from Urban Areas
-    test.select("*")
-      .where(col("Population").>=(URBANPOPCRITERIA))
-      .sort(desc("Total")).show(5)
+    if (urbanArea == true) {
+      test.select("*")
+        .where(col("Population").>=(URBANPOPCRITERIA))
+        .sort(desc("Total"))
+    } else {
+      // Top 5 Most Deadly Cities from Non-Urban Areas
+      test.select("*")
+        .where(col("Population").<(URBANPOPCRITERIA))
+        .where(col("Population").>(0))
+        .sort(desc("Total"))
+    }
 
-    // Top 5 Most Deadly Cities from Non-Urban Areas
-    test.select("*")
-      .where(col("Population").<(URBANPOPCRITERIA))
-      .where(col("Population").>(0))
-      .sort(desc("Total")).show(5)
-
-    return test.select("Admin2")
-               .where(col("Population").>=(URBANPOPCRITERIA)).sort(desc("Total")).take(1).toString
+//    return test.select("Admin2")
+//               .where(col("Population").>=(URBANPOPCRITERIA)).sort(desc("Total"))
 
 
   }
+
+  // Function to find the top n most deadly counties based on month and year
+  def findMostDeadliestCounty(byMonth: Int, andYear: Int, urbanArea: Boolean): DataFrame = {
+    // given the month (byMonth) the year (andYear) and preference to urban or non-urban areas find the most Deadliest County
+    // call to findDeadliestCity to parse out the monthly data
+    val header = List("County", "State", "Population", "UID")
+    val testList = header ++ List("Total")
+    if (urbanArea){
+      val dfTest = findDeadliestCity(byMonth, andYear).select(testList.map(m => col(m)): _*).sort(desc("Total"))
+      dfTest
+    }else {
+      val dfTest = findDeadliestCity(byMonth, andYear, urbanArea).select(testList.map(m => col(m)): _*).sort(desc("Total"))
+      dfTest
+    }
+  }
+
+  // Function to find the top n most deadly states based on month and year
+  def findMostDeadliestState(byMonth: Int, andYear: Int, urbanArea: Boolean): DataFrame = {
+    val header = List("County", "State", "Population", "UID")
+    val testList = header ++ List("Total")
+    if (urbanArea){
+      val dfTest = findDeadliestCity(byMonth, andYear)
+        .select(testList.map(m => col(m)): _*)
+        .groupBy("State", "Population").agg(sum("Total").as("Totals by State"), sum("Population"))
+        .sort(desc("Totals by State"))
+
+      dfTest
+    }else {
+      val dfTest = findDeadliestCity(byMonth, andYear, urbanArea).select(testList.map(m => col(m)): _*).sort(desc("Total"))
+      dfTest
+    }
+
+  }
+
+  // Function to find the top n least deadly counties based on month and year
+  def findLeastDeadliestCounty(byMonth: Int, andYear: Int, urbanArea: Boolean): DataFrame = {
+    // given the month (byMonth) the year (andYear) and preference to urban or non-urban areas find the most Deadliest County
+    // call to findDeadliestCity to parse out the monthly data
+    val header = List("County", "State", "Population", "UID")
+    val testList = header ++ List("Total")
+    val dfTest = findDeadliestCity(byMonth, andYear).select(testList.map(m => col(m)): _*).where("Total > 0").sort(asc("Total"))
+    dfTest
+
+  }
+
+  // Function to find the top n most deadly month and year
+
+  // Function to find the top n least deadly month and year
+
+  // What month had the highest rate of change for Covid deaths?
+
+  // What was the average number of comfirmed cases for urban versus non-urban areas?
+
+  // Do changes in non-urban area data show similar trends in urban areas as well?
 
 
 
