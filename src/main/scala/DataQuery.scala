@@ -104,17 +104,22 @@ object DataQuery {
 
   // Function to find the top n most deadly states based on month and year
   def findMostDeadliestState(byMonth: Int, andYear: Int, urbanArea: Boolean): DataFrame = {
+    // TODO: Input what function does!
     val header = List("County", "State", "Population", "UID")
     val testList = header ++ List("Total")
     if (urbanArea){
-      val dfTest = findDeadliestCity(byMonth, andYear)
+      val dfTest = findDeadliestCity(byMonth, andYear, urbanArea)
         .select(testList.map(m => col(m)): _*)
-        .groupBy("State", "Population").agg(sum("Total").as("Totals by State"), sum("Population"))
+        .groupBy("State")
+        .agg(sum("Total").as("Totals by State"), sum("Population").cast("Long").as("Population Total"))
         .sort(desc("Totals by State"))
-
       dfTest
     }else {
-      val dfTest = findDeadliestCity(byMonth, andYear, urbanArea).select(testList.map(m => col(m)): _*).sort(desc("Total"))
+      val dfTest = findDeadliestCity(byMonth, andYear, urbanArea)
+        .select(testList.map(m => col(m)): _*)
+        .groupBy("State")
+        .agg(sum("Total").as("Totals by State"), sum("Population").cast("Long").as("Population Total"))
+        .sort(desc("Totals by State"))
       dfTest
     }
 
@@ -128,12 +133,19 @@ object DataQuery {
     val testList = header ++ List("Total")
     val dfTest = findDeadliestCity(byMonth, andYear).select(testList.map(m => col(m)): _*).where("Total > 0").sort(asc("Total"))
     dfTest
-
   }
 
-  // Function to find the top n most deadly month and year
+//  // TODO: Function to find the top n most deadly month and year
+//  def findDeadliestMonth(byState: String, byYear: Int, urbanArea: Boolean):DataFrame = {
+//    for(i <- 1 to 12-1)
+//      for(j <- 2 to 12){
+//        val dfResult = findMostDeadliestState(i, byYear, true).where(col("State").===(byState)).take(1).toArray
+//        println(dfResult(0))
+//    }
+//  }
 
   // Function to find the top n least deadly month and year
+
 
   // What month had the highest rate of change for Covid deaths?
 
