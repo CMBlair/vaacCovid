@@ -1,6 +1,9 @@
 package Project2
-import DataQuery.{findMostDeadliestCounty, findMostDeadliestState, spark}
+import DataQuery.{findMostDeadliestCounty, findMostDeadliestState, saveToParquet, spark}
+import org.apache.spark.sql.DataFrame
 import org.apache.spark.sql.functions.{col, desc, round}
+
+import scala.collection.mutable.ArrayBuffer
 
 object Main{
 
@@ -60,6 +63,8 @@ object Main{
     result4NUA.show(n)
     println(s"The top $n most deadliest states for Month ${byMonth} of Year $andYear for non-Urban Areas by Percentage of Population: ")
     ratioResult4NUA.show(n)
+
+    //saveToParquet()
 
     spark.stop()
 
